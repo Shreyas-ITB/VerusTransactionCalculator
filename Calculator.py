@@ -35,7 +35,10 @@ def gettransactions():
         gettxexpanded = send_request("POST", {'content-type': 'text/plain;'}, payload)
         result = gettxexpanded['result']
         confirmations = result['confirmations']
-        blocktime = result['blocktime']
+        try:
+            blocktime = result['blocktime']
+        except:
+            blocktime = 0000000000
         height = result['height']
         try:
             expiryheight = result['expiryheight']
