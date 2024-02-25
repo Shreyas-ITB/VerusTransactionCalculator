@@ -1,6 +1,6 @@
 # VerusRewardsCalculator
 
-A simple program that calculates your staking rewards and exports it into a csv file.
+A simple program that calculates your transactions and exports it into a csv file in a nice informative readable form.
 
 ## Requirements
 
