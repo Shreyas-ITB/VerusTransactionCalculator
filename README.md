@@ -25,3 +25,7 @@ Create a python venv by running ```python -m venv venv``` in the project's direc
 - Includes the price changes in your desired currency.
 - Goes through each and every transaction that you have made.
 - Includes the provided amount and the settled amount.
+
+## Note
+- The time it takes depends on the number of transactions you have made from the address.
+- It also depends on your network speed.
