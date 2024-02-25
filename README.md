@@ -5,7 +5,6 @@ A simple program that calculates your transactions and exports it into a csv fil
 ## Requirements
 
 * Python 3.9 or earlier
-* Verus Wallet that should be running in Native mode or CLI wallet
 
 ## Setup
 
