@@ -1,83 +1,88 @@
-import json
-from datetime import datetime
-from decimal import Decimal
 from csv_writer import write_csv
-from config import TO_DATE, FROM_DATE, FILENAME_IN, FILENAME_OUT, PRICE_FILE_NAME
-from prices import get_price_for_time
+from pycoingecko import CoinGeckoAPI
+import requests
+from config import FILENAME_OUT, CURRENCY, ADDRESS
 
-# Load prices
-print("Loading prices...")
-try:
-    with open(PRICE_FILE_NAME, 'r', encoding='utf8') as price_file:
-        price_data = price_file.read()
-        prices = json.loads(price_data)
-except Exception as e:
-    print("Error reading price data")
-    print(e)
-    exit(1)
-
-if not prices:
-    print("No price data")
-    exit(1)
-
-print("Prices loaded.")
-
-# Load transactions
-print("Loading transactions...")
-try:
-    with open(FILENAME_IN, 'r', encoding='utf8') as tx_file:
-        tx_data = tx_file.read()
-        transactions = json.loads(tx_data)
-except Exception as e:
-    print("Error reading tx data")
-    print(e)
-    exit(1)
-
-if not transactions:
-    print("No tx data")
-    exit(1)
-
-print("Transactions loaded.")
 results = []
-total_vrsc = 0
-total_usd = Decimal(0)
+total_vout = []
+total_vin = []
+total_currency = []
 
-print("\nSaving Coinbase Txs...")
-for tx in transactions:
-    try:
-        usdval = (Decimal(get_price_for_time(prices, tx['blocktime'])) * Decimal(tx['amount'])).quantize(Decimal('0.00'))
-    except TypeError:
-        usdval = "NaN"
-    if (tx['category'] == 'generate' or tx['category'] == 'mint')and \
-            FROM_DATE < int(tx['blocktime']) < TO_DATE:
-        tx_date = datetime.utcfromtimestamp(int(tx['blocktime']))
-        if tx['category'] == 'stake':
-            settype = "Staking"
-        else:
-            settype = "Staking"
-        to_push = {
-            'type': settype,
-            'buy': tx['amount'],
-            'buycur': 'VRSC',
-            'sell': '',
-            'sellcur': '',
-            'fee': '',
-            'feecur': '',
-            'exchange': '',
-            'group': '',
-            'comment': 'Staking' if tx['category'] == 'mint' else 'Mining',
-            'date': tx_date.strftime('%Y-%m-%d %H:%M:%S'),
-            'TXID': tx['txid'],
-            'usdvalue': usdval #(Decimal(get_price_for_time(prices, tx['blocktime'])) * Decimal(tx['amount'])).quantize(Decimal('0.00'))
+# Helps to send the request to the RPC.
+def send_request(method, headers, data):
+    response = requests.request(method, "https://rpc.vrsc.komodefi.com", headers=headers, json=data)
+    return response.json()
+
+def fetchprice():
+    cg = CoinGeckoAPI()
+    data = cg.get_price(ids="verus-coin", vs_currencies=CURRENCY)
+    return data['verus-coin'][CURRENCY]
+
+def gettransactions():
+    print("\nSaving Coinbase Txs...")
+    print("Fetching prices...")
+    print("This might take a while... depends on how many transactions you have made over time.")
+    print("It scans all the transactons that you have made..")
+    gettx = requests.get(f"https://explorer.verus.io/ext/getaddress/{ADDRESS}")
+    for tx in gettx.json()['last_txs']:
+        address = tx['addresses']
+        payload = {
+        "jsonrpc": "1.0",
+        "id": "curltest",
+        "method": "getrawtransaction",
+        "params": [address, 1]
         }
-        total_usd = Decimal('0')
-        total_usd += Decimal(to_push['usdvalue'])
-        total_vrsc += Decimal(tx['amount'])
+        gettxexpanded = send_request("POST", {'content-type': 'text/plain;'}, payload)
+        result = gettxexpanded['result']
+        confirmations = result['confirmations']
+        blocktime = result['blocktime']
+        height = result['height']
+        try:
+            expiryheight = result['expiryheight']
+        except:
+            expiryheight = "NULL"
+        txid = result['txid']
+
+        # Extracting information from vin element
+        vin_info = result['vin']
+        try:
+            vin_value = vin_info[0]['value']  # Extracting only the first vin value
+        except:
+            vin_value = 0
+
+        # Extracting information from vout element
+        vout_info = result['vout']
+        try:
+            vout_value = vout_info[0]['value']
+        except:
+            vout_value = 0
+        # vout_type = [vout['scriptPubKey']['type'] for vout in vout_info]
+        to_push = {
+                'type': "txn",
+                'vinamt': vin_value,
+                'vincur': 'VRSC',
+                'voutamt': vout_value,
+                'voutcur': 'VRSC',
+                'fee': '0.00000001',
+                'feecur': 'VRSC',
+                'exchange': 'false',
+                'group': '',
+                'comment': 'Transaction',
+                'date': blocktime,
+                'TXID': txid,
+                'height': height,
+                'expiry': expiryheight,
+                'confirmations': confirmations,
+                f'{CURRENCY}value per coin': fetchprice() * 1,
+                f'{CURRENCY}value': fetchprice() * vout_value
+            }
         results.append(to_push)
+        total_vin.append(vin_value)
+        total_vout.append(vout_value)
+        write_csv(FILENAME_OUT, results)
 
-write_csv(FILENAME_OUT, results)
-
-print(f"Recorded {len(results)} staking/mining transaction(s)!")
-print(f"\nTotal VRSC: {total_vrsc}")
-print(f"Total USD: {total_usd}")
+gettransactions()
+print(f"Recorded {len(results)} transaction(s)!")
+print(f"Total VIN(s) Recorded: {len(total_vin)}")
+print(f"Total VOUT(s) Recorded: {len(total_vout)}")
 print(f"Wrote detailed outputs to {FILENAME_OUT}\n")
