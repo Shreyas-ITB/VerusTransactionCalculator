@@ -1,91 +1,109 @@
 from csv_writer import write_csv
 from pycoingecko import CoinGeckoAPI
 import requests
-from config import FILENAME_OUT, CURRENCY, ADDRESS
+from config import FILENAME_OUT, CURRENCY, ADDRESS, BLOCK
+from forex_python.converter import CurrencyCodes
 
+# Initialize CurrencyCodes object
+currency_codes = CurrencyCodes()
 results = []
-total_vout = []
-total_vin = []
-total_currency = []
-
-# Helps to send the request to the RPC.
-def send_request(method, headers, data):
-    response = requests.request(method, "https://rpc.vrsc.komodefi.com", headers=headers, json=data)
-    return response.json()
+matching_transactions = []
+arr_currencies = [
+    {"currencyid": "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV", "ticker": "VRSC"},
+    {"currencyid": "iGBs4DWztRNvNEJBt4mqHszLxfKTNHTkhM", "ticker": "DAI.vETH"},
+    {"currencyid": "iCkKJuJScy4Z6NSDK7Mt42ZAB2NEnAE1o4", "ticker": "MKR.vETH"},
+    {"currencyid": "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X", "ticker": "vETH"},
+    {"currencyid": "iJczmut8fHgRvVxaNfEPm7SkgJLDFtPcrK", "ticker": "LINK.vETH"},
+    {"currencyid": "iC5TQFrFXSYLQGkiZ8FYmZHFJzaRF5CYgE", "ticker": "EURC.vETH"},
+    {"currencyid": "iS3NjE3XRYWoHRoovpLhFnbDraCq7NFStf", "ticker": "WBTC.vETH"},
+    {"currencyid": "i9oCSqKALwJtcv49xUKS2U2i79h1kX6NEY", "ticker": "USDT.vETH"},
+    {"currencyid": "i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd", "ticker": "USDC.vETH"},
+    {"currencyid": "iEnQEjjozf1HZkqFT9U4NKnzz1iGZ7LbJ4", "ticker": "TRAC.vETH"},
+    {"currencyid": "iNtUUdjsqV34snGZJerAvPLaojo6tV9sfd", "ticker": "MARS4.vETH"}
+]
 
 def fetchprice():
     cg = CoinGeckoAPI()
     data = cg.get_price(ids="verus-coin", vs_currencies=CURRENCY)
     return data['verus-coin'][CURRENCY]
 
+def format_number(number):
+    suffixes = ['', 'thousand', 'million', 'billion', 'trillion']
+    suffix_index = 0
+    
+    while abs(number) >= 1000 and suffix_index < len(suffixes)-1:
+        number /= 1000.0
+        suffix_index += 1
+        
+    return '{:.2f} {}'.format(number, suffixes[suffix_index])
+
+def get_ticker_by_currency_id(currency_id):
+    currency = next((item for item in arr_currencies if item["currencyid"] == currency_id), None)
+    if currency:
+        return currency["ticker"]
+    return "Currency not found"
+
+def getcurrentblockheight():
+    blockheight = requests.get("https://explorer.verus.io/api/getblockcount")
+    return blockheight.text
+
+def gettxns():
+    blkheight = getcurrentblockheight()
+    req = requests.get(f"http://116.203.53.84:5000/gettransactions/Bridge.vETH/{BLOCK}/{blkheight}")
+    return req.json()
+
 def gettransactions():
-    print("\nSaving Coinbase Txs...")
     print("Fetching prices...")
-    print("This might take a while... depends on how many transactions you have made over time.")
-    print("It scans all the transactons that you have made..")
-    gettx = requests.get(f"https://explorer.verus.io/ext/getaddress/{ADDRESS}")
-    for tx in gettx.json()['last_txs']:
-        address = tx['addresses']
-        payload = {
-        "jsonrpc": "1.0",
-        "id": "curltest",
-        "method": "getrawtransaction",
-        "params": [address, 1]
-        }
-        gettxexpanded = send_request("POST", {'content-type': 'text/plain;'}, payload)
-        result = gettxexpanded['result']
-        confirmations = result['confirmations']
-        try:
-            blocktime = result['blocktime']
-        except:
-            blocktime = 0000000000
-        height = result['height']
-        try:
-            expiryheight = result['expiryheight']
-        except:
-            expiryheight = "NULL"
-        txid = result['txid']
-
-        # Extracting information from vin element
-        vin_info = result['vin']
-        try:
-            vin_value = vin_info[0]['value']  # Extracting only the first vin value
-        except:
-            vin_value = 0
-
-        # Extracting information from vout element
-        vout_info = result['vout']
-        try:
-            vout_value = vout_info[0]['value']
-        except:
-            vout_value = 0
-        # vout_type = [vout['scriptPubKey']['type'] for vout in vout_info]
-        to_push = {
-                'type': "txn",
-                'vinamt': vin_value,
-                'vincur': 'VRSC',
-                'voutamt': vout_value,
-                'voutcur': 'VRSC',
-                'fee': '0.00000001',
-                'feecur': 'VRSC',
-                'exchange': 'false',
-                'group': '',
-                'comment': 'Transaction',
-                'date': blocktime,
-                'TXID': txid,
-                'height': height,
-                'expiry': expiryheight,
-                'confirmations': confirmations,
-                f'{CURRENCY}value per coin': fetchprice() * 1,
-                f'{CURRENCY}value': fetchprice() * vout_value
-            }
-        results.append(to_push)
-        total_vin.append(vin_value)
-        total_vout.append(vout_value)
-        write_csv(FILENAME_OUT, results)
+    price = fetchprice()
+    currenciessym = currency_codes.get_symbol(CURRENCY.upper())
+    print(f"Value of 1 VRSC in {CURRENCY.upper()} is {price}{currenciessym}")
+    print("Fetching the transactions from the bridge using VerusStatisticsAPI.")
+    txns = gettxns()
+    # Iterate through each item in the JSON data
+    for item in txns:
+        destination = item.get("destination", {})
+        if destination.get("address") == ADDRESS:
+            convert = item.get("convert")
+            currencyvalues = item.get("currencyvalues", {})
+            currencyid, amount = list(currencyvalues.items())[0]  # Assuming there's only one item in currencyvalues
+            destination_type = destination.get("type")
+            fees = item.get("fees")
+            feecurrencyid = item.get("feecurrencyid")
+            destinationcurrencyid = item.get("destinationcurrencyid")
+            reservetoreserve = item.get("reservetoreserve")
+            # Append matching transaction to the list
+            matching_transactions.append({
+                "convert": convert,
+                "currencyid": currencyid,
+                "amount": amount,
+                "destination_type": destination_type,
+                "fees": fees,
+                "feecurrencyid": feecurrencyid,
+                "destinationcurrencyid": destinationcurrencyid,
+                "reservetoreserve": reservetoreserve
+            })
+    # Check if any matches were found
+    if matching_transactions:
+        print(f"Cross-Chain transactions found for address {ADDRESS}, Calculating the values might take some time..")
+        for transaction in matching_transactions:
+            total_amount = 0
+            total_amount += transaction['amount']
+            results.append({
+                "Conversion Status": transaction['convert'],
+                "Currency": get_ticker_by_currency_id(transaction['currencyid']),
+                "Amount": transaction['amount'],
+                f"{CURRENCY.upper()} Value": f"{transaction['amount'] * price}{currenciessym}",
+                "Fees": transaction['fees'],
+                "Fees Currency": get_ticker_by_currency_id(transaction['feecurrencyid']),
+                "Destination Currency": get_ticker_by_currency_id(transaction['destinationcurrencyid']),
+                "Address": ADDRESS,
+                "Type": transaction['destination_type'],
+                "Reserve-to-Reserve": transaction['reservetoreserve']
+            })
+            write_csv(FILENAME_OUT, results)
+        print(f"Found {len(results)} number of total transactions associated with your address {ADDRESS}.")
+        print("CSV File has been generated.")
+    else:
+        print("No bridge/cross-chain transactions found for address", ADDRESS)
 
 gettransactions()
-print(f"Recorded {len(results)} transaction(s)!")
-print(f"Total VIN(s) Recorded: {len(total_vin)}")
-print(f"Total VOUT(s) Recorded: {len(total_vout)}")
-print(f"Wrote detailed outputs to {FILENAME_OUT}\n")
