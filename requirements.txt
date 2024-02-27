@@ -6,3 +6,4 @@ pycoingecko
 requests
 setuptools
 urllib3
+forex-python
