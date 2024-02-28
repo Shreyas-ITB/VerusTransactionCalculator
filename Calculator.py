@@ -7,7 +7,6 @@ from forex_python.converter import CurrencyCodes
 # Initialize CurrencyCodes object
 currency_codes = CurrencyCodes()
 results = []
-matching_transactions = []
 arr_currencies = [
     {"currencyid": "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV", "ticker": "VRSC"},
     {"currencyid": "iGBs4DWztRNvNEJBt4mqHszLxfKTNHTkhM", "ticker": "DAI.vETH"},
@@ -49,7 +48,7 @@ def getcurrentblockheight():
 
 def gettxns():
     blkheight = getcurrentblockheight()
-    req = requests.get(f"http://116.203.53.84:5000/gettransactions/Bridge.vETH/{BLOCK}/{blkheight}")
+    req = requests.get(f"http://116.203.53.84:5000/getimports/Bridge.vETH/{BLOCK}/{blkheight}")
     return req.json()
 
 def getdaiprice():
@@ -74,34 +73,53 @@ def gettransactions():
     currenciessym = currency_codes.get_symbol(CURRENCY.upper())
     print(f"Value of 1 VRSC in {CURRENCY.upper()} is {price}{currenciessym}")
     print("Fetching the transactions from the bridge using VerusStatisticsAPI.")
-    txns = gettxns()
-    # Iterate through each item in the JSON data
-    for item in txns:
-        destination = item.get("destination", {})
-        if destination.get("address") == ADDRESS:
-            convert = item.get("convert")
-            currencyvalues = item.get("currencyvalues", {})
-            currencyid, amount = list(currencyvalues.items())[0]  # Assuming there's only one item in currencyvalues
-            destination_type = destination.get("type")
-            fees = item.get("fees")
-            feecurrencyid = item.get("feecurrencyid")
-            destinationcurrencyid = item.get("destinationcurrencyid")
-            reservetoreserve = item.get("reservetoreserve")
-            # Append matching transaction to the list
-            matching_transactions.append({
-                "convert": convert,
-                "currencyid": currencyid,
-                "amount": amount,
-                "destination_type": destination_type,
-                "fees": fees,
-                "feecurrencyid": feecurrencyid,
-                "destinationcurrencyid": destinationcurrencyid,
-                "reservetoreserve": reservetoreserve
-            })
+    # Iterate through result
+    data = gettxns()
+    # List to store matched data
+    matched_data = []
+
+    # Iterate through result
+    for res in data["result"]:
+        # Check if destination address matches
+        for transfer in res["transfers"]:
+            if transfer["destination"]["address"] == ADDRESS:
+                # Get required information
+                exporttxid = res["import"]["exporttxid"]
+                importheight = res["importheight"]
+                blockhash = res["importnotarization"]["proofroots"][0]["blockhash"]
+                gasprice = res["importnotarization"]["proofroots"][0]["gasprice"]
+                height = res["importnotarization"]["proofroots"][0]["height"]
+                importtxid = res["importtxid"]
+                # Get currency value and type
+                convertstatus = transfer["convert"]
+                currency, value = transfer["currencyvalues"].popitem()
+                currencytype = transfer["destination"]["type"]
+                destinationcurrencyid = transfer["destinationcurrencyid"]
+                feecurrencyid = transfer["feecurrencyid"]
+                fees = transfer["fees"]
+                # reservetoreserve = transfer["reservetoreserve"]
+                
+                # Append matched data to the list
+                matched_data.append({
+                    "exporttxid": exporttxid,
+                    "importheight": importheight,
+                    "blockhash": blockhash,
+                    "gasprice": gasprice,
+                    "height": height,
+                    "importtxid": importtxid,
+                    "currencyid": currency,
+                    "amount": value,
+                    "destination_type": currencytype,
+                    "destinationcurrencyid": destinationcurrencyid,
+                    "feecurrencyid": feecurrencyid,
+                    "fees": fees,
+                    "convert": convertstatus,
+                    "reservetoreserve": True
+                })
     # Check if any matches were found
-    if matching_transactions:
+    if matched_data:
         print(f"Cross-Chain transactions found for address {ADDRESS}, Calculating the values might take some time..")
-        for transaction in matching_transactions:
+        for transaction in matched_data:
             if get_ticker_by_currency_id(transaction['currencyid']) == "DAI.vETH":
                 currencyval = transaction['amount'] * getdaiprice()[0]
             elif get_ticker_by_currency_id(transaction['currencyid']) == "MKR.vETH":
@@ -119,6 +137,12 @@ def gettransactions():
                 "Fees Currency": get_ticker_by_currency_id(transaction['feecurrencyid']),
                 "Destination Currency": get_ticker_by_currency_id(transaction['destinationcurrencyid']),
                 "Address": ADDRESS,
+                "Import TXID": transaction['importtxid'],
+                "Export TXID": transaction['exporttxid'],
+                "Block Hash": transaction['blockhash'],
+                "Import Height": transaction['importheight'],
+                "Block Height": transaction['height'],
+                "Gas Price": transaction['gasprice'],
                 "Type": transaction['destination_type'],
                 "Reserve-to-Reserve": transaction['reservetoreserve']
             })
