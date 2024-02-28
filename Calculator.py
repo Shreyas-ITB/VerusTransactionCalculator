@@ -91,7 +91,6 @@ def gettransactions():
                 height = res["importnotarization"]["proofroots"][0]["height"]
                 importtxid = res["importtxid"]
                 # Get currency value and type
-                convertstatus = transfer["convert"]
                 currency, value = transfer["currencyvalues"].popitem()
                 currencytype = transfer["destination"]["type"]
                 destinationcurrencyid = transfer["destinationcurrencyid"]
@@ -113,7 +112,7 @@ def gettransactions():
                     "destinationcurrencyid": destinationcurrencyid,
                     "feecurrencyid": feecurrencyid,
                     "fees": fees,
-                    "convert": convertstatus,
+                    "convert": True,
                     "reservetoreserve": True
                 })
     # Check if any matches were found
