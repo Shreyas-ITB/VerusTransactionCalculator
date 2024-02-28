@@ -52,6 +52,22 @@ def gettxns():
     req = requests.get(f"http://116.203.53.84:5000/gettransactions/Bridge.vETH/{BLOCK}/{blkheight}")
     return req.json()
 
+def getdaiprice():
+    req = requests.get(f"http://116.203.53.84:5000/getdaiveth_daireserveprice")
+    return req.json()
+
+def getvrscprice():
+    req = requests.get(f"http://116.203.53.84:5000/getvrsc_vrscreserveprice")
+    return req.json()
+
+def getmkrprice():
+    req = requests.get(f"http://116.203.53.84:5000/getmkrveth_mkrreserveprice")
+    return req.json()
+
+def getethprice():
+    req = requests.get(f"http://116.203.53.84:5000/getveth_vethreserveprice")
+    return req.json()
+
 def gettransactions():
     print("Fetching prices...")
     price = fetchprice()
@@ -86,13 +102,19 @@ def gettransactions():
     if matching_transactions:
         print(f"Cross-Chain transactions found for address {ADDRESS}, Calculating the values might take some time..")
         for transaction in matching_transactions:
-            total_amount = 0
-            total_amount += transaction['amount']
+            if get_ticker_by_currency_id(transaction['currencyid']) == "DAI.vETH":
+                currencyval = transaction['amount'] * getdaiprice()[0]
+            elif get_ticker_by_currency_id(transaction['currencyid']) == "MKR.vETH":
+                currencyval = transaction['amount'] * getmkrprice()[0]
+            elif get_ticker_by_currency_id(transaction['currencyid']) == "vETH":
+                currencyval = transaction['amount'] * getethprice()[0]
+            elif get_ticker_by_currency_id(transaction['currencyid']) == "VRSC":
+                currencyval = transaction['amount'] * price
             results.append({
                 "Conversion Status": transaction['convert'],
                 "Currency": get_ticker_by_currency_id(transaction['currencyid']),
                 "Amount": transaction['amount'],
-                f"{CURRENCY.upper()} Value": f"{transaction['amount'] * price}{currenciessym}",
+                "USD Value": f"{currencyval}$",
                 "Fees": transaction['fees'],
                 "Fees Currency": get_ticker_by_currency_id(transaction['feecurrencyid']),
                 "Destination Currency": get_ticker_by_currency_id(transaction['destinationcurrencyid']),
