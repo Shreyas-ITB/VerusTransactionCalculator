@@ -126,7 +126,7 @@ def gettransactions():
             elif get_ticker_by_currency_id(transaction['currencyid']) == "vETH":
                 currencyval = transaction['amount'] * getethprice()[0]
             elif get_ticker_by_currency_id(transaction['currencyid']) == "VRSC":
-                currencyval = transaction['amount'] * price
+                currencyval = transaction['amount'] * getvrscprice()[0]
             results.append({
                 "Conversion Status": transaction['convert'],
                 "Currency": get_ticker_by_currency_id(transaction['currencyid']),
